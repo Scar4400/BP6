@@ -61,4 +61,73 @@ def evaluate_model(model, X_test, y_test):
     return {
         'accuracy': accuracy,
         'precision': precision,
-        'recall':
+        'recall': recall,
+        'f1': f1
+    }
+
+def get_feature_importance(model, feature_names):
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+    elif hasattr(model, 'coef_'):
+        importances = np.abs(model.coef_[0])
+    else:
+        raise ValueError("Model doesn't have feature importances or coefficients.")
+
+    feature_importance = pd.DataFrame({'feature': feature_names, 'importance': importances})
+    feature_importance = feature_importance.sort_values('importance', ascending=False).reset_index(drop=True)
+    return feature_importance
+
+def train_and_evaluate_models(X, y):
+    X_train, X_test, y_train, y_test = split_data(X, y)
+
+    models = {
+        'Random Forest': train_model(X_train, y_train, 'rf'),
+        'XGBoost': train_model(X_train, y_train, 'xgb'),
+        'LightGBM': train_model(X_train, y_train, 'lgbm'),
+        'Logistic Regression': train_model(X_train, y_train, 'lr')
+    }
+
+    results = {}
+    feature_importances = {}
+
+    for name, model in models.items():
+        results[name] = evaluate_model(model, X_test, y_test)
+        feature_importances[name] = get_feature_importance(model, X.columns)
+
+    return models, results, feature_importances
+
+def predict_matches(model, X):
+    return model.predict_proba(X)
+
+if __name__ == "__main__":
+    from data_fetcher import get_all_data
+    from data_preprocessing import preprocess_data
+    from feature_engineering import engineer_features
+
+    pinnacle_data, livescore_data, api_football_data = get_all_data()
+    preprocessed_data = preprocess_data(pinnacle_data, livescore_data, api_football_data)
+    engineered_data = engineer_features(preprocessed_data)
+
+    X = engineered_data.drop('result', axis=1)
+    y = engineered_data['result']
+
+    models, results, feature_importances = train_and_evaluate_models(X, y)
+
+    print("Model Results:")
+    for name, metrics in results.items():
+        print(f"{name}:")
+        for metric, value in metrics.items():
+            print(f"  {metric}: {value:.4f}")
+        print()
+
+    print("Top 10 Feature Importances:")
+    for name, importance in feature_importances.items():
+        print(f"{name}:")
+        print(importance.head(10))
+        print()
+
+    # Example of predicting new matches
+    new_matches = X.head(5)  # Replace with actual new match data
+    predictions = predict_matches(models['Random Forest'], new_matches)
+    print("Predictions for new matches:")
+    print(predictions)
